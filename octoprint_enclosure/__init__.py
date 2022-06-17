@@ -9,6 +9,7 @@ import RPi.GPIO as GPIO
 from flask import jsonify, request, make_response, Response
 from octoprint.server.util.flask import restricted_access
 from werkzeug.exceptions import BadRequest
+from RPLCD.i2c import CharLCD
 import time
 import sys
 import glob
@@ -74,12 +75,25 @@ class EnclosurePlugin(octoprint.plugin.StartupPlugin, octoprint.plugin.TemplateP
     dummy_delta = 0.5
     
     def __init__(self):
+        self.mylcd = None
+        self.block = None
         # mqtt helper
         self.mqtt_publish = lambda *args, **kwargs: None
         # hardcoded
         self.mqtt_root_topic = "octoprint/plugins/enclosure"
         self.mqtt_sensor_topic = self.mqtt_root_topic + "/" + "enclosure"
         self.mqtt_message = "{\"temperature\": 0, \"humidity\": 0}"
+        try:
+         self.mylcd = CharLCD(i2c_expander='PCF8574', address=0x27, cols=16, rows=2, backlight_enabled=True, charmap='A00')
+         mylcd = self.mylcd
+         if mylcd is not None:           
+            mylcd.clear()
+            mylcd.cursor_pos = (1,0)
+            mylcd.write_string("   Loading...   ")
+        except Exception as e:
+         self._logger.info("Exception during initialisation of the LCD-Driver")
+
+
   
     def start_timer(self):
         """
@@ -839,8 +853,66 @@ class EnclosurePlugin(octoprint.plugin.StartupPlugin, octoprint.plugin.TemplateP
                     self.mqtt_sensor_topic = self.mqtt_root_topic + "/" + sensor['label']
                     self.mqtt_message = {"temperature":  temp, "humidity": hum}
                     self.mqtt_publish(self.mqtt_sensor_topic, self.mqtt_message)
+
+                 #   if not sensor['use_fahrenheit']: 
+                 #     tunit = "°C"
+                 #   else:
+                 #     tunit = "°F"
+
+                mylcd = self.mylcd
+                if mylcd is not None:           
+                    mylcd.clear()
+                    mylcd.cursor_pos = (0,0)
+
+                    try: 
+                       curTemps = self._printer.get_current_temperatures()
+                       mylcd.write_string("ET " + str(int(temp)))
+                       tooltemp = "TL " + str(int(curTemps["tool0"]["actual"]))
+                       mylcd.cursor_pos = (0,16 - len(tooltemp))
+                       mylcd.write_string(tooltemp)
+                       mylcd.cursor_pos = (1,0)
+                       mylcd.write_string("EH " + str(int(hum)))
+                       bedtemp = "BD " + str(int(curTemps["bed"]["actual"]))
+                       mylcd.cursor_pos = (1,16 - len(bedtemp))
+                       mylcd.write_string(bedtemp)
+                    except Exception as exce: 
+                        self.log_error(exce)
+                        mylcd.clear()
+                        mylcd.write_string("ET " + str(int(temp)))
+                        mylcd.cursor_pos = (1,0)
+                        mylcd.write_string("EH " + str(int(hum)))
+
         except Exception as ex:
+            
             self.log_error(ex)
+            mylcd = self.mylcd
+            if mylcd is not None:           
+                mylcd.clear()
+                mylcd.cursor_pos = (0,0)
+                try:
+                    curTemps = self._printer.get_current_temperatures()
+                    mylcd.write_string("ET 0")
+                    tooltemp = "TL " + str(int(curTemps["tool0"]["actual"]))
+                    mylcd.cursor_pos = (0,16 - len(tooltemp))
+                    mylcd.write_string(tooltemp)
+                    mylcd.cursor_pos = (1,0)
+                    mylcd.write_string("EH 0")
+                    bedtemp = "BD " + str(int(curTemps["bed"]["actual"]))
+                    mylcd.cursor_pos = (1,16 - len(bedtemp))
+                    mylcd.write_string(bedtemp)
+                except Exception as exc:   
+                    self.log_error(exc)
+                    mylcd.clear()
+                    mylcd.write_string("ET 0")
+                    tooltemp = "TL 0"
+                    mylcd.cursor_pos = (0,16 - len(tooltemp))
+                    mylcd.write_string(tooltemp)
+                    mylcd.cursor_pos = (1,0)
+                    mylcd.write_string("EH 0")
+                    bedtemp = "BD 0"
+                    mylcd.cursor_pos = (1,16 - len(bedtemp))
+                    mylcd.write_string(bedtemp)
+
 
     def toggle_output(self, output_index, first_run=False):
         for output in [item for item in self.rpi_outputs if item['index_id'] == output_index]:
@@ -1055,6 +1127,11 @@ class EnclosurePlugin(octoprint.plugin.StartupPlugin, octoprint.plugin.TemplateP
                     self.to_float(temp) * 1.8 + 32, 1)
                 hum = round(self.to_float(hum), 1)
                 airquality = round(self.to_float(airquality), 1)
+
+
+
+
+
                 return temp, hum, airquality
             return None, None, None
         except Exception as ex:
