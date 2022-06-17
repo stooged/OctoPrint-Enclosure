@@ -1,15 +1,3 @@
-Find the plugin useful? Buy me a coffee
-[![Donate](https://img.shields.io/badge/Donate-PayPal-green.svg)](https://www.paypal.me/VitorHenrique/2)
-
-# THIS PLUGIN IS DEPRACATED! 
-I'm moving away from it, and when ready the replacement plugin would be here: https://github.com/vitormhenrique/OctoPrint-Enclosure-V2
-
-# Before opening an issue...
-
-Check the [troubleshooting guide](https://github.com/vitormhenrique/OctoPrint-Enclosure/wiki/Troubleshooting-Guide). Issues with no log, no print screen *will be closed* until the necessary documentation is available.
-
-Also, be aware that upgrading from versions lower than 4.00 will **DELETE** all settings. More information on [release notes](https://github.com/vitormhenrique/OctoPrint-Enclosure/releases/tag/4.00)
-
 # OctoPrint-Enclosure
 
 **Control pretty much everything that you might want to do on your raspberry pi / octoprint / enclosure**
