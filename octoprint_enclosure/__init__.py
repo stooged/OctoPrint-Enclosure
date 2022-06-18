@@ -84,15 +84,39 @@ class EnclosurePlugin(octoprint.plugin.StartupPlugin, octoprint.plugin.TemplateP
         self.mqtt_sensor_topic = self.mqtt_root_topic + "/" + "enclosure"
         self.mqtt_message = "{\"temperature\": 0, \"humidity\": 0}"
         try:
+
+         """
+         16x2 lcd screen
+
          self.mylcd = CharLCD(i2c_expander='PCF8574', address=0x27, cols=16, rows=2, backlight_enabled=True, charmap='A00')
          mylcd = self.mylcd
          if mylcd is not None:           
             mylcd.clear()
+            octname = str( octoprint.settings.Settings.get(octoprint.settings.settings(),["appearance", "name"]))
+            octname = octname[0:16]
+            if not octname: octname = "OctoPrint"
+            mylcd.cursor_pos = (0, int((16 - len(octname)) / 2))
+            mylcd.write_string(octname)
             mylcd.cursor_pos = (1,0)
             mylcd.write_string("   Loading...   ")
+         
+         """
+
+         self.mylcd = CharLCD(i2c_expander='PCF8574', address=0x27, cols=20, rows=4, backlight_enabled=True, charmap='A00')
+         mylcd = self.mylcd
+         if mylcd is not None:           
+            mylcd.clear()
+            octname = str( octoprint.settings.Settings.get(octoprint.settings.settings(),["appearance", "name"]))
+            octname = octname[0:20]
+            if not octname: octname = "OctoPrint"
+            mylcd.cursor_pos = (1, int((20 - len(octname)) / 2))
+            mylcd.write_string(octname)
+            mylcd.cursor_pos = (2, 5)
+            mylcd.write_string("Loading...")
+
+
         except Exception as e:
          self._logger.info("Exception during initialisation of the LCD-Driver")
-
 
   
     def start_timer(self):
@@ -578,18 +602,26 @@ class EnclosurePlugin(octoprint.plugin.StartupPlugin, octoprint.plugin.TemplateP
         for temp_hum_control in [item for item in self.rpi_outputs if item['index_id'] == index_id]:
             temp_hum_control['temp_ctr_set_value'] = set_value
 
+            ############################################################################
+
         self.handle_temp_hum_control()
         return jsonify(success=True)
+
+
 
     @octoprint.plugin.BlueprintPlugin.route("/clearGPIOMode", methods=["GET"])
     def clear_gpio_mode_old(self):
         GPIO.cleanup()
         return jsonify(success=True)
 
+
+
     @octoprint.plugin.BlueprintPlugin.route("/updateUI", methods=["GET"])
     def update_ui_requested_old(self):
         self.update_ui()
         return jsonify(success=True)
+
+
 
     @octoprint.plugin.BlueprintPlugin.route("/getOutputStatus", methods=["GET"])
     def get_output_status_old(self):
@@ -607,6 +639,8 @@ class EnclosurePlugin(octoprint.plugin.StartupPlugin, octoprint.plugin.TemplateP
                 gpio_status.append(dict(index_id=index, status=val, State=val2))
         return Response(json.dumps(gpio_status), mimetype='application/json')
 
+
+
     @octoprint.plugin.BlueprintPlugin.route("/setIO", methods=["GET"])
     def set_io_old(self):
         index = request.values["index_id"]
@@ -620,6 +654,8 @@ class EnclosurePlugin(octoprint.plugin.StartupPlugin, octoprint.plugin.TemplateP
                     self.write_gpio(self.to_int(rpi_output['gpio_pin']), val)
         return jsonify(success=True)
 
+
+
     @octoprint.plugin.BlueprintPlugin.route("/sendShellCommand", methods=["GET"])
     def send_shell_command_old(self):
         output_index = self.to_int(request.values["index_id"])
@@ -629,6 +665,8 @@ class EnclosurePlugin(octoprint.plugin.StartupPlugin, octoprint.plugin.TemplateP
         command = rpi_output['shell_script']
         self.shell_command(command)
         return jsonify(success=True)
+
+
 
     @octoprint.plugin.BlueprintPlugin.route("/setAutoStartUp", methods=["GET"])
     def set_auto_startup_old(self):
@@ -645,6 +683,8 @@ class EnclosurePlugin(octoprint.plugin.StartupPlugin, octoprint.plugin.TemplateP
                 self._logger.info("Setting auto startup for output %s to : %s", index, value)
         self._settings.set(["rpi_outputs"], self.rpi_outputs)
         return jsonify(success=True)
+
+
 
     @octoprint.plugin.BlueprintPlugin.route("/setAutoShutdown", methods=["GET"])
     def set_auto_shutdown_old(self):
@@ -663,6 +703,8 @@ class EnclosurePlugin(octoprint.plugin.StartupPlugin, octoprint.plugin.TemplateP
         self._settings.set(["rpi_outputs"], self.rpi_outputs)
         return jsonify(success=True)
 
+
+
     @octoprint.plugin.BlueprintPlugin.route("/setFilamentSensor", methods=["GET"])
     def set_filament_sensor_old(self):
         index = request.values["index_id"]
@@ -673,6 +715,8 @@ class EnclosurePlugin(octoprint.plugin.StartupPlugin, octoprint.plugin.TemplateP
                 self._logger.info("Setting filament sensor for input %s to : %s", index, value)
         self._settings.set(["rpi_inputs"], self.rpi_inputs)
         return jsonify(success=True)
+
+
 
     @octoprint.plugin.BlueprintPlugin.route("/setPWM", methods=["GET"])
     def set_pwm_old(self):
@@ -685,12 +729,16 @@ class EnclosurePlugin(octoprint.plugin.StartupPlugin, octoprint.plugin.TemplateP
             self.write_pwm(gpio, set_value)
         return jsonify(success=True)
 
+
+
     @octoprint.plugin.BlueprintPlugin.route("/sendGcodeCommand", methods=["GET"])
     def requested_gcode_command_old(self):
         gpio_index = self.to_int(request.values["index_id"])
         rpi_output = [r_out for r_out in self.rpi_outputs if self.to_int(r_out['index_id']) == gpio_index].pop()
         self.send_gcode_command(rpi_output['gcode'])
         return jsonify(success=True)
+
+
 
     @octoprint.plugin.BlueprintPlugin.route("/setNeopixel", methods=["GET"])
     def set_neopixel_old(self):
@@ -712,6 +760,8 @@ class EnclosurePlugin(octoprint.plugin.StartupPlugin, octoprint.plugin.TemplateP
 
         return jsonify(success=True)
 
+
+
     @octoprint.plugin.BlueprintPlugin.route("/setLedstripColor", methods=["GET"])
     def set_ledstrip_color_old(self):
         """ set_ledstrip_color method get request from octoprint and send the command to Open-Smart RGB LED Strip"""
@@ -722,6 +772,8 @@ class EnclosurePlugin(octoprint.plugin.StartupPlugin, octoprint.plugin.TemplateP
                 self.ledstrip_set_rgb(rpi_output, rgb)
 
         return jsonify(success=True)
+
+
 
     # DEPREACTION END
 
@@ -854,10 +906,14 @@ class EnclosurePlugin(octoprint.plugin.StartupPlugin, octoprint.plugin.TemplateP
                     self.mqtt_message = {"temperature":  temp, "humidity": hum}
                     self.mqtt_publish(self.mqtt_sensor_topic, self.mqtt_message)
 
-                 #   if not sensor['use_fahrenheit']: 
-                 #     tunit = "°C"
-                 #   else:
-                 #     tunit = "°F"
+                    if not sensor['use_fahrenheit']: 
+                     tunit = "C"
+                    else:
+                     tunit = "F"
+
+
+                """
+                #16x2 lcd screen
 
                 mylcd = self.mylcd
                 if mylcd is not None:           
@@ -903,15 +959,86 @@ class EnclosurePlugin(octoprint.plugin.StartupPlugin, octoprint.plugin.TemplateP
                 except Exception as exc:   
                     self.log_error(exc)
                     mylcd.clear()
-                    mylcd.write_string("ET 0")
-                    tooltemp = "TL 0"
-                    mylcd.cursor_pos = (0,16 - len(tooltemp))
-                    mylcd.write_string(tooltemp)
+                    mylcd.cursor_pos = (0,0)
+                    mylcd.write_string("Error")
                     mylcd.cursor_pos = (1,0)
-                    mylcd.write_string("EH 0")
-                    bedtemp = "BD 0"
-                    mylcd.cursor_pos = (1,16 - len(bedtemp))
+                    mylcd.write_string("No sensor data")
+
+                """
+
+
+                mylcd = self.mylcd
+                if mylcd is not None:           
+                    mylcd.clear()
+
+                    try: 
+                       curTemps = self._printer.get_current_temperatures()
+                       mylcd.cursor_pos = (0,0)
+                       mylcd.write_string("Enclosure Temp: ")
+                       enctemp = str(int(temp)) + tunit
+                       mylcd.cursor_pos = (0,20 - len(enctemp))
+                       mylcd.write_string(enctemp)
+
+                       mylcd.cursor_pos = (1,0)
+                       mylcd.write_string("Enclosure Humi: ")
+                       enchum = str(int(hum)) + "%"
+                       mylcd.cursor_pos = (1,20 - len(enchum))
+                       mylcd.write_string(enchum)
+
+                       mylcd.cursor_pos = (2,0)
+                       mylcd.write_string("Tool Temp: ")
+                       tooltemp = str(int(curTemps["tool0"]["actual"])) + tunit
+                       mylcd.cursor_pos = (2,20 - len(tooltemp))
+                       mylcd.write_string(tooltemp)
+
+                       mylcd.cursor_pos = (3,0)
+                       mylcd.write_string("Bed Temp: ")
+                       bedtemp = str(int(curTemps["bed"]["actual"])) + tunit
+                       mylcd.cursor_pos = (3,20 - len(bedtemp))
+                       mylcd.write_string(bedtemp)
+
+                    except Exception as exce: 
+                        mylcd.clear()
+                        mylcd.cursor_pos = (1,0)
+                        mylcd.write_string("Enclosure Temp: ")
+                        enctemp = str(int(temp)) + tunit
+                        mylcd.cursor_pos = (1,20 - len(enctemp))
+                        mylcd.write_string(enctemp)
+
+                        mylcd.cursor_pos = (2,0)
+                        mylcd.write_string("Enclosure Humi: ")
+                        enchum = str(int(hum)) + "%"
+                        mylcd.cursor_pos = (2,20 - len(enchum))
+                        mylcd.write_string(enchum)
+
+        except Exception as ex:
+            
+            self.log_error(ex)
+            mylcd = self.mylcd
+            if mylcd is not None:           
+                mylcd.clear()
+                try:
+                    curTemps = self._printer.get_current_temperatures()
+                    mylcd.cursor_pos = (1,0)
+                    mylcd.write_string("Tool Temp: ")
+                    tooltemp = str(int(curTemps["tool0"]["actual"])) + tunit
+                    mylcd.cursor_pos = (1,20 - len(tooltemp))
+                    mylcd.write_string(tooltemp)
+
+                    mylcd.cursor_pos = (2,0)
+                    mylcd.write_string("Bed Temp: ")
+                    bedtemp = str(int(curTemps["bed"]["actual"])) + tunit
+                    mylcd.cursor_pos = (2,20 - len(bedtemp))
                     mylcd.write_string(bedtemp)
+
+                except Exception as exc:   
+                    self.log_error(exc)
+                    mylcd.clear()
+                    mylcd.cursor_pos = (1,7)
+                    mylcd.write_string("Error")
+                    mylcd.cursor_pos = (2,3)
+                    mylcd.write_string("No sensor data")
+
 
 
     def toggle_output(self, output_index, first_run=False):
