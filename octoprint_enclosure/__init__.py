@@ -906,10 +906,10 @@ class EnclosurePlugin(octoprint.plugin.StartupPlugin, octoprint.plugin.TemplateP
                     self.mqtt_message = {"temperature":  temp, "humidity": hum}
                     self.mqtt_publish(self.mqtt_sensor_topic, self.mqtt_message)
 
-                    if not sensor['use_fahrenheit']: 
-                     tunit = "C"
-                    else:
-                     tunit = "F"
+                if not sensor['use_fahrenheit']: 
+                    tunit = "C"
+                else:
+                    tunit = "F"
 
 
                 """
@@ -968,71 +968,86 @@ class EnclosurePlugin(octoprint.plugin.StartupPlugin, octoprint.plugin.TemplateP
 
 
                 mylcd = self.mylcd
-                if mylcd is not None:           
-                    mylcd.clear()
-
+                if mylcd is not None:
                     try: 
                        curTemps = self._printer.get_current_temperatures()
-                       mylcd.cursor_pos = (0,0)
-                       mylcd.write_string("Enclosure Temp: ")
+                       tooltemp = str(int(curTemps["tool0"]["actual"])) + tunit
+                       bedtemp = str(int(curTemps["bed"]["actual"])) + tunit
                        enctemp = str(int(temp)) + tunit
+                       enchum = str(int(hum)) + "%"
+                       mylcd.cursor_pos = (0,0)
+                       mylcd.write_string("Enclosure Temp:")
+                       mylcd.cursor_pos = (0,15)
+                       mylcd.write_string(chr(32) * (5 - len(enctemp)))
                        mylcd.cursor_pos = (0,20 - len(enctemp))
                        mylcd.write_string(enctemp)
-
                        mylcd.cursor_pos = (1,0)
-                       mylcd.write_string("Enclosure Humi: ")
-                       enchum = str(int(hum)) + "%"
+                       mylcd.write_string("Enclosure Humi:")
+                       mylcd.cursor_pos = (1,15)
+                       mylcd.write_string(chr(32) * (5 - len(enchum)))
                        mylcd.cursor_pos = (1,20 - len(enchum))
                        mylcd.write_string(enchum)
-
                        mylcd.cursor_pos = (2,0)
-                       mylcd.write_string("Tool Temp: ")
-                       tooltemp = str(int(curTemps["tool0"]["actual"])) + tunit
+                       mylcd.write_string("Tool Temp:")
+                       mylcd.cursor_pos = (2,10)
+                       mylcd.write_string(chr(32) * (10 - len(tooltemp)))
                        mylcd.cursor_pos = (2,20 - len(tooltemp))
                        mylcd.write_string(tooltemp)
-
                        mylcd.cursor_pos = (3,0)
-                       mylcd.write_string("Bed Temp: ")
-                       bedtemp = str(int(curTemps["bed"]["actual"])) + tunit
+                       mylcd.write_string("Bed Temp:")
+                       mylcd.cursor_pos = (3,9)
+                       mylcd.write_string(chr(32) * (11 - len(bedtemp)))
                        mylcd.cursor_pos = (3,20 - len(bedtemp))
                        mylcd.write_string(bedtemp)
 
-                    except Exception as exce: 
-                        mylcd.clear()
-                        mylcd.cursor_pos = (1,0)
-                        mylcd.write_string("Enclosure Temp: ")
+                    except Exception as exce:
+                        #self.log_error(exce) 
                         enctemp = str(int(temp)) + tunit
+                        enchum = str(int(hum)) + "%"
+                        mylcd.cursor_pos = (0,0)
+                        mylcd.write_string(chr(32) * 20)
+                        mylcd.cursor_pos = (1,0)
+                        mylcd.write_string("Enclosure Temp:")
+                        mylcd.cursor_pos = (1,15)
+                        mylcd.write_string(chr(32) * (5 - len(enctemp)))
                         mylcd.cursor_pos = (1,20 - len(enctemp))
                         mylcd.write_string(enctemp)
-
                         mylcd.cursor_pos = (2,0)
-                        mylcd.write_string("Enclosure Humi: ")
-                        enchum = str(int(hum)) + "%"
+                        mylcd.write_string("Enclosure Humi:")
+                        mylcd.cursor_pos = (2,15)
+                        mylcd.write_string(chr(32) * (5 - len(enchum)))
                         mylcd.cursor_pos = (2,20 - len(enchum))
                         mylcd.write_string(enchum)
+                        mylcd.cursor_pos = (3,0)
+                        mylcd.write_string(chr(32) * 20)
 
         except Exception as ex:
-            
-            self.log_error(ex)
+            #self.log_error(ex)
             mylcd = self.mylcd
             if mylcd is not None:           
-                mylcd.clear()
                 try:
                     curTemps = self._printer.get_current_temperatures()
-                    mylcd.cursor_pos = (1,0)
-                    mylcd.write_string("Tool Temp: ")
                     tooltemp = str(int(curTemps["tool0"]["actual"])) + tunit
+                    bedtemp = str(int(curTemps["bed"]["actual"])) + tunit
+                    mylcd.cursor_pos = (0,0)
+                    mylcd.write_string(chr(32) * 20)
+                    mylcd.cursor_pos = (1,0)
+                    mylcd.write_string("Tool Temp:")
+                    mylcd.cursor_pos = (1,10)
+                    mylcd.write_string(chr(32) * (10 - len(tooltemp)))
                     mylcd.cursor_pos = (1,20 - len(tooltemp))
                     mylcd.write_string(tooltemp)
-
                     mylcd.cursor_pos = (2,0)
-                    mylcd.write_string("Bed Temp: ")
-                    bedtemp = str(int(curTemps["bed"]["actual"])) + tunit
+                    mylcd.write_string("Bed Temp:")
+                    mylcd.cursor_pos = (2,9)
+                    mylcd.write_string(chr(32) * (11 - len(bedtemp)))
                     mylcd.cursor_pos = (2,20 - len(bedtemp))
                     mylcd.write_string(bedtemp)
+                    mylcd.cursor_pos = (3,0)
+                    mylcd.write_string(chr(32) * 20)
 
                 except Exception as exc:   
-                    self.log_error(exc)
+                    #self.log_error(exc)
                     mylcd.clear()
                     mylcd.cursor_pos = (1,7)
                     mylcd.write_string("Error")
