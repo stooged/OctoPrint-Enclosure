@@ -57,7 +57,7 @@ def CheckInputActiveLow(Input_Pull_Resistor):
         return False
 
 class EnclosurePlugin(octoprint.plugin.StartupPlugin, octoprint.plugin.TemplatePlugin, octoprint.plugin.SettingsPlugin,
-                      octoprint.plugin.AssetPlugin, octoprint.plugin.BlueprintPlugin,
+                      octoprint.plugin.AssetPlugin, octoprint.plugin.BlueprintPlugin, octoprint.plugin.ProgressPlugin,
                       octoprint.plugin.EventHandlerPlugin):
     rpi_outputs = []
     rpi_inputs = []
@@ -73,50 +73,61 @@ class EnclosurePlugin(octoprint.plugin.StartupPlugin, octoprint.plugin.TemplateP
     development_mode = False
     dummy_value = 30.0
     dummy_delta = 0.5
-    
+
+    isPrinting = False
+    lastTempVal = 0
+    lastHumVal = 0
+    printProgress = ""
+    dispTick = 0
+    lcd_display = None
+    is_20x4lcd = True
+
+
+
     def __init__(self):
-        self.mylcd = None
-        self.block = None
+
         # mqtt helper
         self.mqtt_publish = lambda *args, **kwargs: None
         # hardcoded
         self.mqtt_root_topic = "octoprint/plugins/enclosure"
         self.mqtt_sensor_topic = self.mqtt_root_topic + "/" + "enclosure"
         self.mqtt_message = "{\"temperature\": 0, \"humidity\": 0}"
+        self.init_lcd()
+
+
+
+
+    def init_lcd(self):
         try:
-
-         """
-         16x2 lcd screen
-
-         self.mylcd = CharLCD(i2c_expander='PCF8574', address=0x27, cols=16, rows=2, backlight_enabled=True, charmap='A00')
-         mylcd = self.mylcd
-         if mylcd is not None:           
-            mylcd.clear()
-            octname = str( octoprint.settings.Settings.get(octoprint.settings.settings(),["appearance", "name"]))
-            octname = octname[0:16]
-            if not octname: octname = "OctoPrint"
-            mylcd.cursor_pos = (0, int((16 - len(octname)) / 2))
-            mylcd.write_string(octname)
-            mylcd.cursor_pos = (1,0)
-            mylcd.write_string("   Loading...   ")
-         
-         """
-
-         self.mylcd = CharLCD(i2c_expander='PCF8574', address=0x27, cols=20, rows=4, backlight_enabled=True, charmap='A00')
-         mylcd = self.mylcd
-         if mylcd is not None:           
-            mylcd.clear()
-            octname = str( octoprint.settings.Settings.get(octoprint.settings.settings(),["appearance", "name"]))
-            octname = octname[0:20]
-            if not octname: octname = "OctoPrint"
-            mylcd.cursor_pos = (1, int((20 - len(octname)) / 2))
-            mylcd.write_string(octname)
-            mylcd.cursor_pos = (2, 5)
-            mylcd.write_string("Loading...")
-
-
+            if self.is_20x4lcd:
+                #20x4 lcd screen
+               self.lcd_display = CharLCD(i2c_expander='PCF8574', address=0x27, cols=20, rows=4, backlight_enabled=True, charmap='A00')
+               if self.lcd_display is not None:           
+                   self.lcd_display.clear()
+                   octname = str( octoprint.settings.Settings.get(octoprint.settings.settings(),["appearance", "name"]))
+                   octname = octname[0:20]
+                   if not octname: octname = "OctoPrint"
+                   self.lcd_display.cursor_pos = (1, int((20 - len(octname)) / 2))
+                   self.lcd_display.write_string(octname)
+                   self.lcd_display.cursor_pos = (2, 5)
+                   self.lcd_display.write_string("Loading...")
+            else:
+                #16x2 lcd screen
+               self.lcd_display = CharLCD(i2c_expander='PCF8574', address=0x27, cols=16, rows=2, backlight_enabled=True, charmap='A00')
+               if self.lcd_display is not None:           
+                   self.lcd_display.clear()
+                   octname = str( octoprint.settings.Settings.get(octoprint.settings.settings(),["appearance", "name"]))
+                   octname = octname[0:16]
+                   if not octname: octname = "OctoPrint"
+                   self.lcd_display.cursor_pos = (0, int((16 - len(octname)) / 2))
+                   self.lcd_display.write_string(octname)
+                   self.lcd_display.cursor_pos = (1,0)
+                   self.lcd_display.write_string("   Loading...   ")
         except Exception as e:
-         self._logger.info("Exception during initialisation of the LCD-Driver")
+            self.lcd_display = None
+            self.log_error(e)
+
+
 
   
     def start_timer(self):
@@ -204,9 +215,23 @@ class EnclosurePlugin(octoprint.plugin.StartupPlugin, octoprint.plugin.TemplateP
         self.start_timer()
         self.print_complete = False
 
+
+    def on_print_progress(self, storage, path, progress):
+
+        percent = int(progress / 6.25) + 1
+        completed = '\x01' * percent
+        self.printProgress = 'Completed: ' + str(progress) + '%'
+
+
+
+
+
+
     def get_settings_version(self):
         return 10
 
+
+    
     def on_settings_migrate(self, target, current=None):
         self._logger.warn("######### current settings version %s target settings version %s #########", current, target)
         self._logger.info("#########        Current settings        #########")
@@ -258,6 +283,10 @@ class EnclosurePlugin(octoprint.plugin.StartupPlugin, octoprint.plugin.TemplateP
             self._settings.set(["rpi_outputs"], [])
             self._settings.set(["rpi_inputs"], [])
             self.rpi_inputs = self._settings.get(["rpi_inputs"])
+    
+
+
+
 
     #Scan all configured inputs and outputs and return the pin value
     @octoprint.plugin.BlueprintPlugin.route("/ReadPin/<int:identifier>", methods=["GET"])
@@ -598,14 +627,11 @@ class EnclosurePlugin(octoprint.plugin.StartupPlugin, octoprint.plugin.TemplateP
     def set_enclosure_temp_humidity_old(self):
         set_value = self.to_float(request.values["set_temperature"])
         index_id = self.to_int(request.values["index_id"])
-
         for temp_hum_control in [item for item in self.rpi_outputs if item['index_id'] == index_id]:
             temp_hum_control['temp_ctr_set_value'] = set_value
-
-            ############################################################################
-
         self.handle_temp_hum_control()
         return jsonify(success=True)
+
 
 
 
@@ -886,6 +912,10 @@ class EnclosurePlugin(octoprint.plugin.StartupPlugin, octoprint.plugin.TemplateP
         except Exception as ex:
             self.log_error(ex)
 
+
+
+
+
     def check_enclosure_temp(self):
         try:
             sensor_data = []
@@ -912,147 +942,164 @@ class EnclosurePlugin(octoprint.plugin.StartupPlugin, octoprint.plugin.TemplateP
                     tunit = "F"
 
 
-                """
-                #16x2 lcd screen
 
-                mylcd = self.mylcd
-                if mylcd is not None:           
-                    mylcd.clear()
-                    mylcd.cursor_pos = (0,0)
+            if self.lcd_display is not None:        
+
+                #20x4 lcd screen
+                if self.is_20x4lcd:  
+                    
+                    if self.isPrinting and self.printProgress != "" and self.dispTick >= 5:
+                        self.lcd_display.clear()
+                        self.lcd_display.cursor_pos = (1,5)
+                        self.lcd_display.write_string("Printing...")
+                        self.lcd_display.cursor_pos = (2, int((20 - len(self.printProgress)) / 2))
+                        self.lcd_display.write_string(self.printProgress)
+                        self.dispTick = 0
+                        return
 
                     try: 
-                       curTemps = self._printer.get_current_temperatures()
-                       mylcd.write_string("ET " + str(int(temp)))
-                       tooltemp = "TL " + str(int(curTemps["tool0"]["actual"]))
-                       mylcd.cursor_pos = (0,16 - len(tooltemp))
-                       mylcd.write_string(tooltemp)
-                       mylcd.cursor_pos = (1,0)
-                       mylcd.write_string("EH " + str(int(hum)))
-                       bedtemp = "BD " + str(int(curTemps["bed"]["actual"]))
-                       mylcd.cursor_pos = (1,16 - len(bedtemp))
-                       mylcd.write_string(bedtemp)
-                    except Exception as exce: 
-                        self.log_error(exce)
-                        mylcd.clear()
-                        mylcd.write_string("ET " + str(int(temp)))
-                        mylcd.cursor_pos = (1,0)
-                        mylcd.write_string("EH " + str(int(hum)))
-
-        except Exception as ex:
-            
-            self.log_error(ex)
-            mylcd = self.mylcd
-            if mylcd is not None:           
-                mylcd.clear()
-                mylcd.cursor_pos = (0,0)
-                try:
-                    curTemps = self._printer.get_current_temperatures()
-                    mylcd.write_string("ET 0")
-                    tooltemp = "TL " + str(int(curTemps["tool0"]["actual"]))
-                    mylcd.cursor_pos = (0,16 - len(tooltemp))
-                    mylcd.write_string(tooltemp)
-                    mylcd.cursor_pos = (1,0)
-                    mylcd.write_string("EH 0")
-                    bedtemp = "BD " + str(int(curTemps["bed"]["actual"]))
-                    mylcd.cursor_pos = (1,16 - len(bedtemp))
-                    mylcd.write_string(bedtemp)
-                except Exception as exc:   
-                    self.log_error(exc)
-                    mylcd.clear()
-                    mylcd.cursor_pos = (0,0)
-                    mylcd.write_string("Error")
-                    mylcd.cursor_pos = (1,0)
-                    mylcd.write_string("No sensor data")
-
-                """
-
-
-                mylcd = self.mylcd
-                if mylcd is not None:
-                    try: 
-                       curTemps = self._printer.get_current_temperatures()
-                       tooltemp = str(int(curTemps["tool0"]["actual"])) + tunit
-                       bedtemp = str(int(curTemps["bed"]["actual"])) + tunit
-                       enctemp = str(int(temp)) + tunit
-                       enchum = str(int(hum)) + "%"
-                       mylcd.cursor_pos = (0,0)
-                       mylcd.write_string("Enclosure Temp:")
-                       mylcd.cursor_pos = (0,15)
-                       mylcd.write_string(chr(32) * (5 - len(enctemp)))
-                       mylcd.cursor_pos = (0,20 - len(enctemp))
-                       mylcd.write_string(enctemp)
-                       mylcd.cursor_pos = (1,0)
-                       mylcd.write_string("Enclosure Humi:")
-                       mylcd.cursor_pos = (1,15)
-                       mylcd.write_string(chr(32) * (5 - len(enchum)))
-                       mylcd.cursor_pos = (1,20 - len(enchum))
-                       mylcd.write_string(enchum)
-                       mylcd.cursor_pos = (2,0)
-                       mylcd.write_string("Tool Temp:")
-                       mylcd.cursor_pos = (2,10)
-                       mylcd.write_string(chr(32) * (10 - len(tooltemp)))
-                       mylcd.cursor_pos = (2,20 - len(tooltemp))
-                       mylcd.write_string(tooltemp)
-                       mylcd.cursor_pos = (3,0)
-                       mylcd.write_string("Bed Temp:")
-                       mylcd.cursor_pos = (3,9)
-                       mylcd.write_string(chr(32) * (11 - len(bedtemp)))
-                       mylcd.cursor_pos = (3,20 - len(bedtemp))
-                       mylcd.write_string(bedtemp)
+                        if self.isPrinting: self.dispTick += 1 
+                        curTemps = self._printer.get_current_temperatures()
+                        tooltemp = str(int(curTemps["tool0"]["actual"])) + tunit
+                        bedtemp = str(int(curTemps["bed"]["actual"])) + tunit
+                        enctemp = str(int(temp)) + tunit
+                        enchum = str(int(hum)) + "%"
+                        self.lcd_display.cursor_pos = (0,0)
+                        self.lcd_display.write_string("Enclosure Temp:")
+                        self.lcd_display.cursor_pos = (0,15)
+                        self.lcd_display.write_string(chr(32) * (5 - len(enctemp)))
+                        self.lcd_display.cursor_pos = (0,20 - len(enctemp))
+                        self.lcd_display.write_string(enctemp)
+                        self.lcd_display.cursor_pos = (1,0)
+                        self.lcd_display.write_string("Enclosure Humi:")
+                        self.lcd_display.cursor_pos = (1,15)
+                        self.lcd_display.write_string(chr(32) * (5 - len(enchum)))
+                        self.lcd_display.cursor_pos = (1,20 - len(enchum))
+                        self.lcd_display.write_string(enchum)
+                        self.lcd_display.cursor_pos = (2,0)
+                        self.lcd_display.write_string("Tool Temp:")
+                        self.lcd_display.cursor_pos = (2,10)
+                        self.lcd_display.write_string(chr(32) * (10 - len(tooltemp)))
+                        self.lcd_display.cursor_pos = (2,20 - len(tooltemp))
+                        self.lcd_display.write_string(tooltemp)
+                        self.lcd_display.cursor_pos = (3,0)
+                        self.lcd_display.write_string("Bed Temp:")
+                        self.lcd_display.cursor_pos = (3,9)
+                        self.lcd_display.write_string(chr(32) * (11 - len(bedtemp)))
+                        self.lcd_display.cursor_pos = (3,20 - len(bedtemp))
+                        self.lcd_display.write_string(bedtemp)
 
                     except Exception as exce:
                         #self.log_error(exce) 
                         enctemp = str(int(temp)) + tunit
                         enchum = str(int(hum)) + "%"
-                        mylcd.cursor_pos = (0,0)
-                        mylcd.write_string(chr(32) * 20)
-                        mylcd.cursor_pos = (1,0)
-                        mylcd.write_string("Enclosure Temp:")
-                        mylcd.cursor_pos = (1,15)
-                        mylcd.write_string(chr(32) * (5 - len(enctemp)))
-                        mylcd.cursor_pos = (1,20 - len(enctemp))
-                        mylcd.write_string(enctemp)
-                        mylcd.cursor_pos = (2,0)
-                        mylcd.write_string("Enclosure Humi:")
-                        mylcd.cursor_pos = (2,15)
-                        mylcd.write_string(chr(32) * (5 - len(enchum)))
-                        mylcd.cursor_pos = (2,20 - len(enchum))
-                        mylcd.write_string(enchum)
-                        mylcd.cursor_pos = (3,0)
-                        mylcd.write_string(chr(32) * 20)
+                        self.lcd_display.cursor_pos = (0,0)
+                        self.lcd_display.write_string(chr(32) * 20)
+                        self.lcd_display.cursor_pos = (1,0)
+                        self.lcd_display.write_string("Enclosure Temp:")
+                        self.lcd_display.cursor_pos = (1,15)
+                        self.lcd_display.write_string(chr(32) * (5 - len(enctemp)))
+                        self.lcd_display.cursor_pos = (1,20 - len(enctemp))
+                        self.lcd_display.write_string(enctemp)
+                        self.lcd_display.cursor_pos = (2,0)
+                        self.lcd_display.write_string("Enclosure Humi:")
+                        self.lcd_display.cursor_pos = (2,15)
+                        self.lcd_display.write_string(chr(32) * (5 - len(enchum)))
+                        self.lcd_display.cursor_pos = (2,20 - len(enchum))
+                        self.lcd_display.write_string(enchum)
+                        self.lcd_display.cursor_pos = (3,0)
+                        self.lcd_display.write_string(chr(32) * 20)
 
+                else:
+                    #16x2 lcd screen
+                    self.lcd_display.clear()
+                    self.lcd_display.cursor_pos = (0,0)
+
+                    if self.isPrinting and self.printProgress != "" and self.dispTick >= 5:
+                        self.lcd_display.clear()
+                        self.lcd_display.cursor_pos = (0,2)
+                        self.lcd_display.write_string("Printing...")
+                        self.lcd_display.cursor_pos = (1, int((16 - len(self.printProgress)) / 2))
+                        self.lcd_display.write_string(self.printProgress)
+                        self.dispTick = 0
+                        return
+
+                    try: 
+                        if self.isPrinting: self.dispTick += 1 
+                        curTemps = self._printer.get_current_temperatures()
+                        tooltemp = "TL " + str(int(curTemps["tool0"]["actual"]))
+                        bedtemp = "BD " + str(int(curTemps["bed"]["actual"]))
+                        self.lcd_display.write_string("ET " + str(int(temp)))
+                        self.lcd_display.cursor_pos = (0,16 - len(tooltemp))
+                        self.lcd_display.write_string(tooltemp)
+                        self.lcd_display.cursor_pos = (1,0)
+                        self.lcd_display.write_string("EH " + str(int(hum)))
+                        self.lcd_display.cursor_pos = (1,16 - len(bedtemp))
+                        self.lcd_display.write_string(bedtemp)
+                    except Exception as exce: 
+                        #self.log_error(exce)
+                        self.lcd_display.clear()
+                        self.lcd_display.write_string("ET " + str(int(temp)))
+                        self.lcd_display.cursor_pos = (1,0)
+                        self.lcd_display.write_string("EH " + str(int(hum)))
+
+ 
         except Exception as ex:
             #self.log_error(ex)
-            mylcd = self.mylcd
-            if mylcd is not None:           
+            if self.lcd_display is not None:           
                 try:
-                    curTemps = self._printer.get_current_temperatures()
-                    tooltemp = str(int(curTemps["tool0"]["actual"])) + tunit
-                    bedtemp = str(int(curTemps["bed"]["actual"])) + tunit
-                    mylcd.cursor_pos = (0,0)
-                    mylcd.write_string(chr(32) * 20)
-                    mylcd.cursor_pos = (1,0)
-                    mylcd.write_string("Tool Temp:")
-                    mylcd.cursor_pos = (1,10)
-                    mylcd.write_string(chr(32) * (10 - len(tooltemp)))
-                    mylcd.cursor_pos = (1,20 - len(tooltemp))
-                    mylcd.write_string(tooltemp)
-                    mylcd.cursor_pos = (2,0)
-                    mylcd.write_string("Bed Temp:")
-                    mylcd.cursor_pos = (2,9)
-                    mylcd.write_string(chr(32) * (11 - len(bedtemp)))
-                    mylcd.cursor_pos = (2,20 - len(bedtemp))
-                    mylcd.write_string(bedtemp)
-                    mylcd.cursor_pos = (3,0)
-                    mylcd.write_string(chr(32) * 20)
+                    #20x4 lcd screen
+                    if self.is_20x4lcd:
+                        curTemps = self._printer.get_current_temperatures()
+                        tooltemp = str(int(curTemps["tool0"]["actual"])) + tunit
+                        bedtemp = str(int(curTemps["bed"]["actual"])) + tunit
+                        self.lcd_display.cursor_pos = (0,0)
+                        self.lcd_display.write_string(chr(32) * 20)
+                        self.lcd_display.cursor_pos = (1,0)
+                        self.lcd_display.write_string("Tool Temp:")
+                        self.lcd_display.cursor_pos = (1,10)
+                        self.lcd_display.write_string(chr(32) * (10 - len(tooltemp)))
+                        self.lcd_display.cursor_pos = (1,20 - len(tooltemp))
+                        self.lcd_display.write_string(tooltemp)
+                        self.lcd_display.cursor_pos = (2,0)
+                        self.lcd_display.write_string("Bed Temp:")
+                        self.lcd_display.cursor_pos = (2,9)
+                        self.lcd_display.write_string(chr(32) * (11 - len(bedtemp)))
+                        self.lcd_display.cursor_pos = (2,20 - len(bedtemp))
+                        self.lcd_display.write_string(bedtemp)
+                        self.lcd_display.cursor_pos = (3,0)
+                        self.lcd_display.write_string(chr(32) * 20)
+
+                    else:
+                        #16x2 lcd screen
+                        self.lcd_display.cursor_pos = (0,0)
+                        curTemps = self._printer.get_current_temperatures()
+                        tooltemp = "TL " + str(int(curTemps["tool0"]["actual"]))
+                        bedtemp = "BD " + str(int(curTemps["bed"]["actual"]))
+                        self.lcd_display.write_string("ET 0")
+                        self.lcd_display.cursor_pos = (0,16 - len(tooltemp))
+                        self.lcd_display.write_string(tooltemp)
+                        self.lcd_display.cursor_pos = (1,0)
+                        self.lcd_display.write_string("EH 0")
+                        self.lcd_display.cursor_pos = (1,16 - len(bedtemp))
+                        self.lcd_display.write_string(bedtemp)
 
                 except Exception as exc:   
                     #self.log_error(exc)
-                    mylcd.clear()
-                    mylcd.cursor_pos = (1,7)
-                    mylcd.write_string("Error")
-                    mylcd.cursor_pos = (2,3)
-                    mylcd.write_string("No sensor data")
+                    self.lcd_display.clear()
+                    #20x4 lcd screen
+                    if self.is_20x4lcd:
+                        self.lcd_display.cursor_pos = (1,7)
+                        self.lcd_display.write_string("Error")
+                        self.lcd_display.cursor_pos = (2,3)
+                        self.lcd_display.write_string("No sensor data")
+                    else:
+                        #16x2 lcd screen
+                        self.lcd_display.cursor_pos = (0,0)
+                        self.lcd_display.write_string("Error")
+                        self.lcd_display.cursor_pos = (1,0)
+                        self.lcd_display.write_string("No sensor data")
+
 
 
 
@@ -2125,6 +2172,8 @@ class EnclosurePlugin(octoprint.plugin.StartupPlugin, octoprint.plugin.TemplateP
 
         if event == Events.PRINT_STARTED:
             self.print_complete = False
+            self.printProgress = ""
+            self.isPrinting = True
             self.cancel_all_events_on_queue()
             self.event_queue = []
             self.start_filament_detection()
@@ -2144,6 +2193,8 @@ class EnclosurePlugin(octoprint.plugin.StartupPlugin, octoprint.plugin.TemplateP
         elif event == Events.PRINT_DONE:
             self.stop_filament_detection()
             self.print_complete = True
+            self.isPrinting = False
+            self.printProgress = ""
             for rpi_output in self.rpi_outputs:
                 shutdown_time = rpi_output['shutdown_time']
                 if rpi_output['output_type'] == 'pwm' and rpi_output['pwm_temperature_linked']:
@@ -2155,6 +2206,8 @@ class EnclosurePlugin(octoprint.plugin.StartupPlugin, octoprint.plugin.TemplateP
             self.update_ui()
 
         elif event in (Events.PRINT_CANCELLED, Events.PRINT_FAILED):
+            self.isPrinting = False
+            self.printProgress = ""
             self.stop_filament_detection()
             self.cancel_all_events_on_queue()
             self.event_queue = []
